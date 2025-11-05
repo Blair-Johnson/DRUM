@@ -9,7 +9,7 @@ Ali Sadeghian, Mohammadreza Armandpour, Patrick Ding, Daisy Zhe Wang.
 NeurIPS 2019.
 
 ## Requirements
-- Python 2.7
+- Python 3.x
 - Numpy 
 - Tensorflow 1.13.1
 

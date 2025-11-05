@@ -19,7 +19,7 @@ def evaluate():
     start = time.time()
 
     if not option.raw:
-        truths = pickle.load(open(option.truths, "r"))
+        truths = pickle.load(open(option.truths, "rb"))
         query_heads, query_tails = truths.values()
     
     hits = 0

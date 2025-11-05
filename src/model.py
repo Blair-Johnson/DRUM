@@ -46,7 +46,7 @@ class Learner(object):
         """ Initialize random and unit row norm matrix of size (r, c). """
         bound = 6./ np.sqrt(c)
         init_matrix = np.random.uniform(-bound, bound, (r, c))
-        init_matrix = np.array(map(lambda row: row / np.linalg.norm(row), init_matrix))
+        init_matrix = np.array(list(map(lambda row: row / np.linalg.norm(row), init_matrix)))
         return init_matrix
 
     def _clip_if_not_None(self, g, v, low, high):
@@ -173,12 +173,12 @@ class Learner(object):
         self.database = {r: tf.sparse_placeholder(
                             dtype=tf.float32, 
                             name="database_%d" % r)
-                            for r in xrange(self.num_operator/2)}
+                            for r in range(self.num_operator//2)}
         
         # Get predictions
         self.predictions = 0.0
         for i_rank in range(self.rank):
-            for t in xrange(self.num_step):
+            for t in range(self.num_step):
                 # memory_read: tensor of size (batch_size, num_entity)
                 # memory_read = tf.squeeze(self.memories, squeeze_dims=[1])
                 memory_read = self.memories_list[i_rank][:, -1, :]
@@ -188,12 +188,12 @@ class Learner(object):
                     # each of size (batch_size, num_entity).
                     database_results = []    
                     memory_read = tf.transpose(memory_read)
-                    for r in xrange(self.num_operator/2):
+                    for r in range(self.num_operator//2):
                         for op_matrix, op_attn in zip(
                                         [self.database[r], 
                                          tf.sparse_transpose(self.database[r])],
                                         [self.attention_operators_list[i_rank][t][r], 
-                                         self.attention_operators_list[i_rank][t][r+self.num_operator/2]]):
+                                         self.attention_operators_list[i_rank][t][r+self.num_operator//2]]):
                             product = tf.sparse_tensor_dense_matmul(op_matrix, memory_read)
                             database_results.append(tf.transpose(product) * op_attn)
                     database_results.append(tf.transpose(memory_read) * self.attention_operators_list[i_rank][t][-1])
@@ -228,8 +228,8 @@ class Learner(object):
         
         self.optimizer = tf.train.AdamOptimizer(self.learning_rate)
         gvs = self.optimizer.compute_gradients(tf.reduce_mean(self.final_loss))
-        capped_gvs = map(
-            lambda (grad, var): self._clip_if_not_None(grad, var, -5., 5.), gvs) 
+        capped_gvs = [
+            self._clip_if_not_None(grad, var, -5., 5.) for grad, var in gvs] 
         self.optimizer_step = self.optimizer.apply_gradients(capped_gvs)
 
     def _run_graph(self, sess, qq, hh, tt, mdb, to_fetch):
@@ -244,7 +244,7 @@ class Learner(object):
 
         feed[self.heads] = hh 
         feed[self.tails] = tt 
-        for r in xrange(self.num_operator / 2):
+        for r in range(self.num_operator // 2):
             feed[self.database[r]] = tf.SparseTensorValue(*mdb[r])
         fetches = to_fetch
         graph_output = sess.run(fetches, feed)
@@ -270,7 +270,7 @@ class Learner(object):
         hh = [0] * len(queries)
         tt = [0] * len(queries)
         mdb = {r: ([(0,0)], [0.], (self.num_entity, self.num_entity)) 
-                for r in xrange(self.num_operator / 2)}
+                for r in range(self.num_operator // 2)}
         to_fetch = self.attention_operators
         attention_operators = self._run_graph(sess, qq, hh, tt, mdb, to_fetch)
         return attention_operators
@@ -280,7 +280,7 @@ class Learner(object):
         hh = [0] * len(qq)
         tt = [0] * len(hh)
         mdb = {r: ([(0,0)], [0.], (self.num_entity, self.num_entity)) 
-                for r in xrange(self.num_operator / 2)}
+                for r in range(self.num_operator // 2)}
         to_fetch = self.vocab_embedding_params
         vocab_embedding = self._run_graph(sess, qq, hh, tt, mdb, to_fetch)
         return vocab_embedding
