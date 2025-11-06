@@ -22,6 +22,23 @@ python src/main.py --datadir=datasets/family --exps_dir=exps/ --exp_name=demo
 
 To get the best performance, use different ranks for different datasets, default value is set to 3.
 
+## Rule Extraction
+
+After training a model, you can extract interpretable Prolog-style rules using the top-1 (argmax) extraction method:
+
+```
+python src/main.py --datadir=datasets/family --exps_dir=exps/ --exp_name=demo --extract_rules
+```
+
+This will create a file `exps/demo/extracted_rules.pl` containing rules like:
+
+```prolog
+% Rules for query: grandfather
+grandfather(X,Y) :- father(X,Z_1), father(Z_1,Y).
+```
+
+Rules use variable names X (source), Y (target), and Z_1, Z_2, ... for intermediate entities. The top-1 method selects the predicate with highest attention weight at each reasoning step.
+
 ## Evaluation
 To evaluate the prediction results, follow the steps below. The first two steps is preparation so that we can compute _filtered_ ranks (see [TransE](https://papers.nips.cc/paper/5071-translating-embeddings-for-modeling-multi-relational-data.pdf) for details).
 
