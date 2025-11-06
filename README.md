@@ -1,17 +1,17 @@
-[![PWC](https://img.shields.io/endpoint.svg?url=https://paperswithcode.com/badge/drum-end-to-end-differentiable-rule-mining-on/link-prediction-on-wn18rr)](https://paperswithcode.com/sota/link-prediction-on-wn18rr?p=drum-end-to-end-differentiable-rule-mining-on) [![PWC](https://img.shields.io/endpoint.svg?url=https://paperswithcode.com/badge/drum-end-to-end-differentiable-rule-mining-on/link-prediction-on-fb15k-237)](https://paperswithcode.com/sota/link-prediction-on-fb15k-237?p=drum-end-to-end-differentiable-rule-mining-on)
-
 # DRUM: End-To-End Differentiable Rule Mining On Knowledge Graphs 
 
-This is the implementation of DRUM, proposed in the following paper:
+This is a fork of the implementation of DRUM, proposed in the following paper:
 
 [DRUM: End-To-End Differentiable Rule Mining On Knowledge Graphs](https://papers.nips.cc/paper/9669-drum-end-to-end-differentiable-rule-mining-on-knowledge-graphs.pdf) -- [\[arXive + appendix\]](https://arxiv.org/abs/1911.00055).
 Ali Sadeghian, Mohammadreza Armandpour, Patrick Ding, Daisy Zhe Wang.
 NeurIPS 2019.
 
 ## Requirements
-- Python 3.x
-- Numpy 
-- Tensorflow 1.13.1
+This implementation has been updated to Python3 from Python2. It is recommended to use [pixi](https://pixi.sh/dev/installation/) to construct a reproducible environment for running this project. After installing pixi, running
+```
+pixi shell
+```
+will put you into a new environment with the required dependencies. You can run `exit` to return to your original shell. You can read more about pixi [here](https://pixi.sh/dev/).
 
 ## Quick start
 The following command starts training a dataset about family relations, and stores the experiment results in the folder `exps/demo/`.
