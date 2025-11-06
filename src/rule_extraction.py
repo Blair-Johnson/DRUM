@@ -247,6 +247,8 @@ def extract_rules_from_model(sess, learner, data, queries=None,
         ...         print(f"  {rule}")
     """
     # Use queries that appear in training/test if not specified
+    # data.query_for_rules contains all relation IDs that appear in train/test data
+    # including both regular and inverse relations (see data.py initialization)
     if queries is None:
         queries = data.query_for_rules
     
@@ -297,8 +299,13 @@ def get_attention_weights_for_query(sess, learner, data, query):
         queries = [query]
     
     # Create dummy data for running the model
+    # Note: We only care about attention weights, not actual predictions
     hh = [0] * len(queries)
     tt = [0] * len(queries)
+    
+    # Create empty sparse matrix database (dummy values since we only fetch attention)
+    # Each relation has forward and inverse, so we need num_operator // 2 matrices
+    # Format: (indices, values, shape) for sparse tensor
     mdb = {r: ([(0, 0)], [0.], (data.num_entity, data.num_entity))
            for r in range(data.num_operator // 2)}
     
@@ -323,6 +330,7 @@ def get_attention_weights_for_query(sess, learner, data, query):
         
         feed[learner.heads] = hh
         feed[learner.tails] = tt
+        # Populate database with dummy sparse tensors (we only need attention, not predictions)
         for r in range(data.num_operator // 2):
             feed[learner.database[r]] = ([(0, 0)], [0.], (data.num_entity, data.num_entity))
         

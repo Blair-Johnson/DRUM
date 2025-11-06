@@ -11,7 +11,8 @@ import sys
 import tensorflow as tf
 import numpy as np
 
-# Add src to path
+# Add src to path for standalone test execution
+# Note: For production use, consider proper package structure with __init__.py
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
 from model import Learner
