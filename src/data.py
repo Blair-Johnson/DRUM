@@ -12,10 +12,14 @@ def parse_prolog_file(filename):
     
     Returns a list of tuples: [(predicate, entity1, entity2), ...]
     Lines starting with % are comments and are ignored.
+    
+    Supports entity and predicate names with alphanumeric characters, 
+    underscores, and hyphens.
     """
     triplets = []
     # Pattern to match: predicate(arg1, arg2).
-    pattern = re.compile(r'^\s*(\w+)\s*\(\s*(\w+)\s*,\s*(\w+)\s*\)\s*\.')
+    # More flexible pattern that allows alphanumeric, underscore, and hyphen
+    pattern = re.compile(r'^\s*([a-zA-Z][a-zA-Z0-9_-]*)\s*\(\s*([a-zA-Z0-9_-]+)\s*,\s*([a-zA-Z0-9_-]+)\s*\)\s*\.')
     
     with open(filename, 'r') as f:
         for line in f:
@@ -187,18 +191,22 @@ class Data(object):
             self.num_operator = 2 * self.num_relation
 
         # get rules for queries and their inverses appeared in train and test
-        if self.num_test > 0:
-            test_queries = set(list(zip(*self.test))[0]) | set(list(zip(*self._augment_with_reverse(self.test)))[0])
-        else:
-            test_queries = set()
+        self.query_for_rules = list(self._extract_queries_from_datasets())
+        self.parser = self._create_parser()
+    
+    def _extract_queries_from_datasets(self):
+        """Extract unique queries from train and test datasets."""
+        queries = set()
         
         if self.num_train > 0:
-            train_queries = set(list(zip(*self.train))[0]) | set(list(zip(*self._augment_with_reverse(self.train)))[0])
-        else:
-            train_queries = set()
+            queries |= set(list(zip(*self.train))[0])
+            queries |= set(list(zip(*self._augment_with_reverse(self.train)))[0])
         
-        self.query_for_rules = list(train_queries | test_queries)
-        self.parser = self._create_parser()
+        if self.num_test > 0:
+            queries |= set(list(zip(*self.test))[0])
+            queries |= set(list(zip(*self._augment_with_reverse(self.test)))[0])
+        
+        return queries
     
     def _extract_vocab_from_prolog(self, folder):
         """Extract entities and relations from Prolog files."""
