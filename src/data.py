@@ -191,7 +191,13 @@ class Data(object):
             test_queries = set(list(zip(*self.test))[0]) | set(list(zip(*self._augment_with_reverse(self.test)))[0])
         else:
             test_queries = set()
-        self.query_for_rules = list(set(list(zip(*self.train))[0]) | test_queries | set(list(zip(*self._augment_with_reverse(self.train)))[0]))
+        
+        if self.num_train > 0:
+            train_queries = set(list(zip(*self.train))[0]) | set(list(zip(*self._augment_with_reverse(self.train)))[0])
+        else:
+            train_queries = set()
+        
+        self.query_for_rules = list(train_queries | test_queries)
         self.parser = self._create_parser()
     
     def _extract_vocab_from_prolog(self, folder):
