@@ -57,12 +57,37 @@ class RuleExtractor:
         if not body_atoms:
             return f"{head_relation}(X,Y)."
         
-        # Build the body of the rule
+        # Single atom: relation(X,Y) :- atom(X,Y).
+        if len(body_atoms) == 1:
+            atom = body_atoms[0]
+            if atom.startswith('inv_'):
+                return f"{head_relation}(X,Y) :- {atom[4:]}(Y,X)."
+            else:
+                return f"{head_relation}(X,Y) :- {atom}(X,Y)."
+        
+        # Multiple atoms: need intermediate variables
+        # relation(X,Y) :- atom1(X,Z), atom2(Z,Y).  for 2 atoms
+        # relation(X,Y) :- atom1(X,Z), atom2(Z,W), atom3(W,Y).  for 3 atoms
+        # Variables: X, Z, W, V, U, ..., Y
+        # That's: X, chr(90)=Z, chr(91)=W, chr(92)=V, ..., Y
+        
         body_parts = []
-        current_var = 'X'
         
         for i, atom in enumerate(body_atoms):
-            next_var = chr(ord('X') + i + 1) if i < len(body_atoms) - 1 else 'Y'
+            # Current variable
+            if i == 0:
+                current_var = 'X'
+            else:
+                # Z, W, V, U, T, S, R, Q, P, O, ...
+                # Start from 'Z' (ord 90)
+                current_var = chr(90 + i - 1)
+            
+            # Next variable
+            if i == len(body_atoms) - 1:
+                next_var = 'Y'
+            else:
+                # Next intermediate: Z, W, V, ...
+                next_var = chr(90 + i)
             
             # Handle inverse relations
             if atom.startswith('inv_'):
@@ -70,8 +95,6 @@ class RuleExtractor:
                 body_parts.append(f"{atom[4:]}({next_var},{current_var})")
             else:
                 body_parts.append(f"{atom}({current_var},{next_var})")
-            
-            current_var = next_var
         
         body_str = ', '.join(body_parts)
         return f"{head_relation}(X,Y) :- {body_str}."
@@ -114,6 +137,8 @@ class Top1RuleExtractor(RuleExtractor):
             # Extract body atoms by taking argmax at each step
             body_atoms = []
             max_attention_sum = 0.0
+            non_selfloop_attention_sum = 0.0
+            non_selfloop_count = 0
             
             for step_attention in rank_attentions:
                 # Find the operator with maximum attention
@@ -126,6 +151,10 @@ class Top1RuleExtractor(RuleExtractor):
                     # Self-loop, don't add to body
                     continue
                 
+                # Track attention on non-self-loop predicates
+                non_selfloop_attention_sum += max_attention
+                non_selfloop_count += 1
+                
                 # Get operator name from parser
                 if not self.data.query_is_language:
                     operator_name = self.parser["operator"][query][max_idx]
@@ -135,9 +164,10 @@ class Top1RuleExtractor(RuleExtractor):
                 body_atoms.append(operator_name)
             
             # Only include rules that meet the threshold
-            # Average attention should be above threshold
-            if len(rank_attentions) > 0:
-                avg_attention = max_attention_sum / len(rank_attentions)
+            # Must have at least one body atom and average attention on 
+            # non-self-loop predicates should be above threshold
+            if non_selfloop_count > 0 and len(rank_attentions) > 0:
+                avg_attention = non_selfloop_attention_sum / non_selfloop_count
                 if avg_attention >= self.rule_threshold:
                     rule_str = self.format_prolog_rule(head_relation, body_atoms)
                     rules.append(rule_str)
