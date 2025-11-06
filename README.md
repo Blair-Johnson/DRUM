@@ -6,12 +6,6 @@ This is a fork of the implementation of DRUM, proposed in the following paper:
 Ali Sadeghian, Mohammadreza Armandpour, Patrick Ding, Daisy Zhe Wang.
 NeurIPS 2019.
 
-## Features
-
-- **Differentiable Rule Learning**: End-to-end training of rule-based models on knowledge graphs
-- **Rule Extraction**: Convert trained models into interpretable Prolog-style rules using top-1 (argmax) extraction
-- **Flexible Architecture**: Configurable rank, steps, and attention mechanisms
-
 ## Requirements
 This implementation has been updated to Python3 from Python2. It is recommended to use [pixi](https://pixi.sh/dev/installation/) to construct a reproducible environment for running this project. After installing pixi, running
 ```
