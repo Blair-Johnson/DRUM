@@ -4,6 +4,7 @@ import time
 import pickle
 from collections import Counter
 import numpy as np
+from rule_extraction import extract_rules_from_model, save_rules_to_file
 
 
 class Experiment():
@@ -211,6 +212,47 @@ class Experiment():
         msg = self.msg_with_time("Vocabulary embedding stored.")
         print(msg)
         self.log_file.write(msg + "\n")
+
+    def extract_rules(self, method='top_1', rule_threshold=None, **kwargs):
+        """
+        Extract interpretable rules from the trained model.
+        
+        Args:
+            method: Extraction method ('top_1', 'top_k', etc.)
+            rule_threshold: Minimum attention threshold for rules.
+                          If None, uses option.rule_thr
+            **kwargs: Additional method-specific parameters
+        """
+        if rule_threshold is None:
+            rule_threshold = self.option.rule_thr
+        
+        print("Starting rule extraction with method: %s" % method)
+        
+        # Extract rules from the model
+        rules_dict = extract_rules_from_model(
+            self.sess, 
+            self.learner, 
+            self.data,
+            queries=None,  # Use all queries from train/test
+            method=method,
+            rule_threshold=rule_threshold,
+            **kwargs
+        )
+        
+        # Save rules to file
+        rules_file = os.path.join(self.option.this_expsdir, "extracted_rules.pl")
+        save_rules_to_file(rules_dict, rules_file, self.data)
+        
+        msg = self.msg_with_time(
+            "Extracted %d rules and saved to %s" % (
+                sum(len(rules) for rules in rules_dict.values()),
+                rules_file
+            )
+        )
+        print(msg)
+        self.log_file.write(msg + "\n")
+        
+        return rules_dict
 
     def close_log_file(self):
         self.log_file.close()

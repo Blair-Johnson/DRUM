@@ -59,6 +59,11 @@ def main():
     parser.add_argument('--rand_break', default=False, action="store_true")
     parser.add_argument('--accuracy', default=False, action="store_true")
     parser.add_argument('--top_k', default=10, type=int)
+    # rule extraction
+    parser.add_argument('--extract_rules', default=False, action="store_true",
+                       help='Extract rules from trained model')
+    parser.add_argument('--rule_method', default='top_1', type=str,
+                       help='Rule extraction method: top_1, top_k')
     
     d = vars(parser.parse_args())
     option = Option(d)
@@ -132,6 +137,10 @@ def main():
         if option.get_vocab_embed:
             print("Start getting vocabulary embedding...")
             experiment.get_vocab_embedding()
+        
+        if option.extract_rules:
+            print("Start extracting rules...")
+            experiment.extract_rules(method=option.rule_method)
             
     experiment.close_log_file()
     print("="*36 + "Finish" + "="*36)
