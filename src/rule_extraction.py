@@ -17,16 +17,14 @@ class RuleExtractor:
     to define specific extraction strategies.
     """
     
-    def __init__(self, data, rule_threshold=1e-2):
+    def __init__(self, data):
         """
         Initialize the rule extractor.
         
         Args:
             data: Data object containing parser and relation information
-            rule_threshold: Minimum attention threshold for including a rule
         """
         self.data = data
-        self.rule_threshold = rule_threshold
         self.parser = data.parser
         
     def extract(self, attention_weights, query):
@@ -133,24 +131,15 @@ class Top1RuleExtractor(RuleExtractor):
             
             # Extract body atoms by taking argmax at each step
             body_atoms = []
-            max_attention_sum = 0.0
-            non_selfloop_attention_sum = 0.0
-            non_selfloop_count = 0
             
             for step_attention in rank_attentions:
                 # Find the operator with maximum attention
                 max_idx = np.argmax(step_attention)
-                max_attention = step_attention[max_idx]
-                max_attention_sum += max_attention
                 
                 # Skip the self-loop operator (last one)
                 if max_idx == len(step_attention) - 1:
                     # Self-loop, don't add to body
                     continue
-                
-                # Track attention on non-self-loop predicates
-                non_selfloop_attention_sum += max_attention
-                non_selfloop_count += 1
                 
                 # Get operator name from parser
                 # For standard queries, query is an int index
@@ -159,20 +148,16 @@ class Top1RuleExtractor(RuleExtractor):
                 
                 body_atoms.append(operator_name)
             
-            # Only include rules that meet the threshold
-            # Must have at least one body atom and average attention on 
-            # non-self-loop predicates should be above threshold
-            if non_selfloop_count > 0 and len(rank_attentions) > 0:
-                avg_attention = non_selfloop_attention_sum / non_selfloop_count
-                if avg_attention >= self.rule_threshold:
-                    rule_str = self.format_prolog_rule(head_relation, body_atoms)
-                    rules.append(rule_str)
+            # Include rule if it has at least one body atom (not just self-loops)
+            if body_atoms:
+                rule_str = self.format_prolog_rule(head_relation, body_atoms)
+                rules.append(rule_str)
         
         return rules
 
 
 def extract_rules_from_model(sess, learner, data, queries=None, 
-                             method='top_1', rule_threshold=1e-2, **kwargs):
+                             method='top_1', **kwargs):
     """
     Extract Prolog-formatted rules from a trained DRUM model.
     
@@ -187,7 +172,6 @@ def extract_rules_from_model(sess, learner, data, queries=None,
         queries: List of query identifiers to extract rules for.
                 If None, uses all queries that appear in train/test.
         method: Extraction method to use ('top_1')
-        rule_threshold: Minimum attention threshold for including a rule
         **kwargs: Additional parameters for specific extraction methods
     
     Returns:
@@ -209,7 +193,7 @@ def extract_rules_from_model(sess, learner, data, queries=None,
     
     # Select the appropriate extractor
     if method == 'top_1':
-        extractor = Top1RuleExtractor(data, rule_threshold)
+        extractor = Top1RuleExtractor(data)
     else:
         raise ValueError(f"Unknown extraction method: {method}")
     

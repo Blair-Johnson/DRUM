@@ -43,7 +43,7 @@ This will create a file `exps/demo/extracted_rules.pl` containing rules like:
 grandfather(X,Y) :- father(X,Z_1), father(Z_1,Y).
 ```
 
-Rules use variable names X (source), Y (target), and Z_1, Z_2, ... for intermediate entities. The top-1 method selects the predicate with highest attention weight at each reasoning step. You can adjust the confidence threshold with `--rule_thr` (default: 0.01).
+Rules use variable names X (source), Y (target), and Z_1, Z_2, ... for intermediate entities. The top-1 method selects the predicate with highest attention weight at each reasoning step.
 
 ## Evaluation
 To evaluate the prediction results, follow the steps below. The first two steps is preparation so that we can compute _filtered_ ranks (see [TransE](https://papers.nips.cc/paper/5071-translating-embeddings-for-modeling-multi-relational-data.pdf) for details).

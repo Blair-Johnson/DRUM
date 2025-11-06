@@ -213,17 +213,10 @@ class Experiment():
         print(msg)
         self.log_file.write(msg + "\n")
 
-    def extract_rules(self, rule_threshold=None):
+    def extract_rules(self):
         """
         Extract interpretable rules from the trained model.
-        
-        Args:
-            rule_threshold: Minimum attention threshold for rules.
-                          If None, uses option.rule_thr
         """
-        if rule_threshold is None:
-            rule_threshold = self.option.rule_thr
-        
         print("Starting rule extraction with top-1 method")
         
         # Extract rules from the model
@@ -232,8 +225,7 @@ class Experiment():
             self.learner, 
             self.data,
             queries=None,  # Use all queries from train/test
-            method='top_1',
-            rule_threshold=rule_threshold
+            method='top_1'
         )
         
         # Save rules to file
