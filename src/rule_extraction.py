@@ -305,7 +305,9 @@ def get_attention_weights_for_query(sess, learner, data, query):
     
     # Create empty sparse matrix database (dummy values since we only fetch attention)
     # Each relation has forward and inverse, so we need num_operator // 2 matrices
+    # (e.g., if num_operator=10, we have 5 base relations × 2 for forward/inverse = 10 operators)
     # Format: (indices, values, shape) for sparse tensor
+    # Using minimal dummy values: single entry at (0,0) with value 0.0
     mdb = {r: ([(0, 0)], [0.], (data.num_entity, data.num_entity))
            for r in range(data.num_operator // 2)}
     
@@ -321,9 +323,12 @@ def get_attention_weights_for_query(sess, learner, data, query):
         # Run the graph to get attention values
         feed = {}
         if not data.query_is_language:
+            # Repeat query for num_step-1 steps, then append END token (data.num_query)
+            # This is the input format expected by the DRUM model
             feed[learner.queries] = [[q] * (learner.num_step - 1) + [data.num_query]
                                      for q in queries]
         else:
+            # For language queries, repeat the query words and append END token
             feed[learner.queries] = [[q] * (learner.num_step - 1)
                                      + [[data.num_vocab] * data.num_word]
                                      for q in queries]
@@ -331,7 +336,9 @@ def get_attention_weights_for_query(sess, learner, data, query):
         feed[learner.heads] = hh
         feed[learner.tails] = tt
         # Populate database with dummy sparse tensors (we only need attention, not predictions)
-        for r in range(data.num_operator // 2):
+        # Each entry: (indices_list, values_list, shape_tuple) for TensorFlow SparseTensor
+        # Using single dummy entry [(0,0)] with value [0.] as placeholder
+        for r in range(data.num_operator // 2):  # num_operator // 2 because of forward/inverse pairs
             feed[learner.database[r]] = ([(0, 0)], [0.], (data.num_entity, data.num_entity))
         
         # Fetch attention for all steps in this rank
