@@ -2,3 +2,6 @@
 *.log
 *.pyc
 exps/
+# pixi environments
+.pixi/*
+!.pixi/config.toml
