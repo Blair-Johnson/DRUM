@@ -130,6 +130,9 @@ class Top1RuleExtractor(RuleExtractor):
             rank_attentions = attention_weights[r]  # [num_steps, num_operators]
             
             # Extract body atoms by taking argmax at each step
+            # NOTE: The model walks BACKWARD from Y (tail) to X (head)
+            # Each step applies: new_entities = {E : E --relation--> old_entities}
+            # So we need to REVERSE the order to get the forward rule
             body_atoms = []
             
             for step_attention in rank_attentions:
@@ -149,7 +152,9 @@ class Top1RuleExtractor(RuleExtractor):
                 body_atoms.append(operator_name)
             
             # Include rule if it has at least one body atom (not just self-loops)
+            # Reverse the body atoms because the model walks backward
             if body_atoms:
+                body_atoms.reverse()  # Reverse to get forward direction
                 rule_str = self.format_prolog_rule(head_relation, body_atoms)
                 rules.append(rule_str)
         
