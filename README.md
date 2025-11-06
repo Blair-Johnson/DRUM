@@ -6,6 +6,12 @@ This is a fork of the implementation of DRUM, proposed in the following paper:
 Ali Sadeghian, Mohammadreza Armandpour, Patrick Ding, Daisy Zhe Wang.
 NeurIPS 2019.
 
+## Features
+
+- **Differentiable Rule Learning**: End-to-end training of rule-based models on knowledge graphs
+- **Rule Extraction**: Convert trained models into interpretable Prolog-style rules (see [RULE_EXTRACTION.md](RULE_EXTRACTION.md))
+- **Flexible Architecture**: Configurable rank, steps, and attention mechanisms
+
 ## Requirements
 This implementation has been updated to Python3 from Python2. It is recommended to use [pixi](https://pixi.sh/dev/installation/) to construct a reproducible environment for running this project. After installing pixi, running
 ```
@@ -21,6 +27,23 @@ python src/main.py --datadir=datasets/family --exps_dir=exps/ --exp_name=demo
 ```
 
 To get the best performance, use different ranks for different datasets, default value is set to 3.
+
+## Rule Extraction
+
+After training a model, you can extract interpretable Prolog-style rules:
+
+```
+python src/main.py --datadir=datasets/family --exps_dir=exps/ --exp_name=demo --extract_rules
+```
+
+This will create a file `exps/demo/extracted_rules.pl` containing rules like:
+
+```prolog
+% Rules for query: grandfather
+grandfather(X,Y) :- father(X,Z), father(Z,Y).
+```
+
+See [RULE_EXTRACTION.md](RULE_EXTRACTION.md) for detailed documentation on rule extraction features, methods, and API.
 
 ## Evaluation
 To evaluate the prediction results, follow the steps below. The first two steps is preparation so that we can compute _filtered_ ranks (see [TransE](https://papers.nips.cc/paper/5071-translating-embeddings-for-modeling-multi-relational-data.pdf) for details).
