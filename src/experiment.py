@@ -113,25 +113,36 @@ class Experiment():
     def train(self):
         while (self.epoch < self.option.max_epoch and not self.early_stopped):
             self.one_epoch_train()
-            self.one_epoch_valid()
-            self.one_epoch_test()
+            
+            # Only run validation if data is available
+            if self.data.num_valid > 0:
+                self.one_epoch_valid()
+            
+            # Only run test if data is available
+            if self.data.num_test > 0:
+                self.one_epoch_test()
+            
             self.epoch += 1
             model_path = self.saver.save(self.sess, 
                                          self.option.model_path,
                                          global_step=self.epoch)
             print("Model saved at %s" % model_path)
             
-            if self.early_stop():
+            # Only check early stopping if we have validation data
+            if self.data.num_valid > 0 and self.early_stop():
                 self.early_stopped = True
                 print("Early stopped at epoch %d" % (self.epoch))
         
-        all_test_in_top = [np.mean(x[1]) for x in self.test_stats]
-        best_test_epoch = np.argmax(all_test_in_top)
-        best_test = all_test_in_top[best_test_epoch]
+        # Only report test results if test data is available
+        if self.data.num_test > 0 and len(self.test_stats) > 0:
+            all_test_in_top = [np.mean(x[1]) for x in self.test_stats]
+            best_test_epoch = np.argmax(all_test_in_top)
+            best_test = all_test_in_top[best_test_epoch]
+            
+            msg = "Best test in top: %0.4f at epoch %d." % (best_test, best_test_epoch + 1)       
+            print(msg)
+            self.log_file.write(msg + "\n")
         
-        msg = "Best test in top: %0.4f at epoch %d." % (best_test, best_test_epoch + 1)       
-        print(msg)
-        self.log_file.write(msg + "\n")
         pickle.dump([self.train_stats, self.valid_stats, self.test_stats],
                     open(os.path.join(self.option.this_expsdir, "results.pckl"), "wb"))
 
