@@ -114,7 +114,7 @@ class Data(object):
             self.num_operator = 2 * self.num_relation
 
         # get rules for queries and their inverses appeared in train and test
-        self.query_for_rules = list(set(zip(*self.train)[0]) | set(zip(*self.test)[0]) | set(zip(*self._augment_with_reverse(self.train))[0]) | set(zip(*self._augment_with_reverse(self.test))[0]))
+        self.query_for_rules = list(set(list(zip(*self.train))[0]) | set(list(zip(*self.test))[0]) | set(list(zip(*self._augment_with_reverse(self.train)))[0]) | set(list(zip(*self._augment_with_reverse(self.test)))[0]))
         self.parser = self._create_parser()
 
     def _create_parser(self):
