@@ -61,16 +61,36 @@ python src/main.py --datadir=datasets/my_prolog_data --exps_dir=exps/ --exp_name
 
 ### Restricting Domain to Background Predicates
 
-When using Prolog format, you can restrict the learning domain to only use predicates that appear in `facts.pl`:
+When using Prolog format, you can restrict the model's operators to only use predicates that appear in `facts.pl`:
 
 ```bash
 python src/main.py --datadir=datasets/my_data --exps_dir=exps/ --exp_name=restricted --restrict_domain
 ```
 
+With `--restrict_domain` enabled:
+- **Training data**: Includes ALL relations from both `facts.pl` and `train.pl`
+- **Model operators**: Restricted to only predicates from `facts.pl` (background knowledge)
+- **Extracted rules**: Only use background predicates in rule bodies
+
 This is useful when:
-- You have many target relations in `train.pl`
-- You want to learn definitions using only a small set of background predicates from `facts.pl`
-- For example: learn 600 target relations using only 10 background predicates
+- You have many target relations in `train.pl` (e.g., 600 different relations)
+- You want to learn definitions using only a small set of background predicates from `facts.pl` (e.g., 10 predicates)
+- For example: train on `aunt(X,Y)`, `uncle(X,Y)`, etc., but rules can only use `father(X,Y)`, `mother(X,Y)`, `brother(X,Y)`, `sister(X,Y)`
+
+**Example:**
+```prolog
+% facts.pl - Background knowledge
+father(john, mary).
+mother(jane, mary).
+brother(bob, mary).
+
+% train.pl - Target relations to learn
+aunt(mary, alice).
+grandmother(jane, alice).
+
+% With --restrict_domain, extracted rules:
+aunt(X,Y) :- brother(Z,X), father(Z,Y).  % Only uses background predicates
+```
 
 ### Optional Validation and Test Sets
 
