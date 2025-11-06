@@ -95,14 +95,22 @@ class Data(object):
             
             # Parse Prolog files to extract entities and relations
             self._extract_vocab_from_prolog(folder)
+            # Set background_relations for TSV format
+            if not hasattr(self, 'background_relations'):
+                self.background_relations = None
         else:
             # TSV format: traditional file structure
             self.relation_file = os.path.join(folder, "relations.txt")
             self.entity_file = os.path.join(folder, "entities.txt")
             
             self.relation_to_number, self.entity_to_number = self._numerical_encode()
+            self.background_relations = None
         
         self.number_to_entity = {v: k for k, v in self.entity_to_number.items()}
+        
+        # Set num_relation and num_query
+        # When restrict_domain is enabled, num_relation is based on ALL relations (for training)
+        # but num_operator will be based on background relations only (for model operations)
         self.num_relation = len(self.relation_to_number)
         self.num_query = self.num_relation * 2
         self.num_entity = len(self.entity_to_number)
@@ -189,7 +197,11 @@ class Data(object):
             self.num_operator = 2 * self.domain_size
         else:
             self.domains = None
-            self.num_operator = 2 * self.num_relation
+            # When restrict_domain is enabled, num_operator is based on background relations only
+            if self.restrict_domain and self.background_relations is not None:
+                self.num_operator = 2 * len(self.background_relations)
+            else:
+                self.num_operator = 2 * self.num_relation
 
         # get rules for queries and their inverses appeared in train and test
         self.query_for_rules = self._extract_queries_from_datasets()
@@ -221,23 +233,33 @@ class Data(object):
         
         # Extract unique entities and relations
         entities = set()
-        relations = set()
+        all_relations = set()
+        background_relations = set()
         
         for head, rel, tail in all_triplets:
             entities.add(head)
             entities.add(tail)
-            relations.add(rel)
+            all_relations.add(rel)
         
-        # If restrict_domain is enabled, only use relations from facts.pl
-        if self.restrict_domain:
-            facts_only_relations = set()
-            for head, rel, tail in facts_triplets:
-                facts_only_relations.add(rel)
-            relations = facts_only_relations
+        # Background relations are those in facts.pl
+        for head, rel, tail in facts_triplets:
+            background_relations.add(rel)
         
-        # Create mappings
+        # Create entity mappings (always use all entities)
         self.entity_to_number = {entity: i for i, entity in enumerate(sorted(entities))}
-        self.relation_to_number = {rel: i for i, rel in enumerate(sorted(relations))}
+        
+        # Create relation mappings
+        if self.restrict_domain:
+            # When restrict_domain is enabled:
+            # - relation_to_number includes ALL relations (for training targets)
+            # - But we track which ones are background-only (for operators)
+            self.relation_to_number = {rel: i for i, rel in enumerate(sorted(all_relations))}
+            self.background_relations = background_relations
+            # num_relation and num_operator will be set based on background relations only
+        else:
+            # Without restrict_domain, use all relations
+            self.relation_to_number = {rel: i for i, rel in enumerate(sorted(all_relations))}
+            self.background_relations = None
     
     def _parse_prolog_triplets(self, filename):
         """Parse Prolog file and convert to internal format."""
@@ -265,9 +287,12 @@ class Data(object):
         parser = {"query":{}, "operator":{}}
         number_to_relation = {value: key for key, value 
                                          in self.relation_to_number.items()}
+        # Create query mappings for ALL relations (including targets)
         for key, value in self.relation_to_number.items():
             parser["query"][value] = key
             parser["query"][value + self.num_relation] = "inv_" + key
+        
+        # Create operator mappings for each query
         for query in range(self.num_relation):
             d = {}
             if self.type_check:
@@ -275,9 +300,22 @@ class Data(object):
                     d[i] = number_to_relation[o]
                     d[i + self.domain_size] = "inv_" + number_to_relation[o]
             else:
-                for k, v in number_to_relation.items():
-                    d[k] = v
-                    d[k + self.num_relation] = "inv_" + v
+                # When restrict_domain is enabled, only include background relations as operators
+                if self.restrict_domain and self.background_relations is not None:
+                    # Create a mapping from background relation index to operator index
+                    background_rel_to_idx = {}
+                    for k, v in number_to_relation.items():
+                        if v in self.background_relations:
+                            # Map to sequential operator indices
+                            op_idx = len(background_rel_to_idx)
+                            background_rel_to_idx[k] = op_idx
+                            d[op_idx] = v
+                            d[op_idx + len(self.background_relations)] = "inv_" + v
+                else:
+                    # Default: all relations are operators
+                    for k, v in number_to_relation.items():
+                        d[k] = v
+                        d[k + self.num_relation] = "inv_" + v
             parser["operator"][query] = d
             parser["operator"][query + self.num_relation] = d
         return parser
