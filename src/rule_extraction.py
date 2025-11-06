@@ -66,10 +66,9 @@ class RuleExtractor:
                 return f"{head_relation}(X,Y) :- {atom}(X,Y)."
         
         # Multiple atoms: need intermediate variables
-        # relation(X,Y) :- atom1(X,Z), atom2(Z,Y).  for 2 atoms
-        # relation(X,Y) :- atom1(X,Z), atom2(Z,W), atom3(W,Y).  for 3 atoms
-        # Variables: X, Z, W, V, U, ..., Y
-        # That's: X, chr(90)=Z, chr(91)=W, chr(92)=V, ..., Y
+        # relation(X,Y) :- atom1(X,Z_1), atom2(Z_1,Y).  for 2 atoms
+        # relation(X,Y) :- atom1(X,Z_1), atom2(Z_1,Z_2), atom3(Z_2,Y).  for 3 atoms
+        # Variables: X, Z_1, Z_2, ..., Y
         
         body_parts = []
         
@@ -78,16 +77,15 @@ class RuleExtractor:
             if i == 0:
                 current_var = 'X'
             else:
-                # Z, W, V, U, T, S, R, Q, P, O, ...
-                # Start from 'Z' (ord 90)
-                current_var = chr(90 + i - 1)
+                # Z_1, Z_2, Z_3, ...
+                current_var = f'Z_{i}'
             
             # Next variable
             if i == len(body_atoms) - 1:
                 next_var = 'Y'
             else:
-                # Next intermediate: Z, W, V, ...
-                next_var = chr(90 + i)
+                # Next intermediate: Z_1, Z_2, ...
+                next_var = f'Z_{i + 1}'
             
             # Handle inverse relations
             if atom.startswith('inv_'):
@@ -123,10 +121,9 @@ class Top1RuleExtractor(RuleExtractor):
         rules = []
         
         # Get the head relation name from the query
-        if not self.data.query_is_language:
-            head_relation = self.parser["query"][query]
-        else:
-            head_relation = self.parser["query"](query)
+        # For standard queries, query is an int index into parser["query"]
+        # For language queries, query is a list to be passed to parser["query"]
+        head_relation = self.parser["query"][query] if isinstance(query, int) else self.parser["query"](query)
         
         rank = len(attention_weights)
         
@@ -156,10 +153,9 @@ class Top1RuleExtractor(RuleExtractor):
                 non_selfloop_count += 1
                 
                 # Get operator name from parser
-                if not self.data.query_is_language:
-                    operator_name = self.parser["operator"][query][max_idx]
-                else:
-                    operator_name = self.parser["operator"][max_idx]
+                # For standard queries, query is an int index
+                # For language queries, we use the operator directly from parser
+                operator_name = self.parser["operator"][query][max_idx] if isinstance(query, int) else self.parser["operator"][max_idx]
                 
                 body_atoms.append(operator_name)
             
@@ -173,46 +169,6 @@ class Top1RuleExtractor(RuleExtractor):
                     rules.append(rule_str)
         
         return rules
-
-
-class TopKRuleExtractor(RuleExtractor):
-    """
-    Extract rules using top-k selection at each step.
-    
-    This extractor selects the top-k predicates at each step and generates
-    multiple rules by combining them.
-    """
-    
-    def __init__(self, data, rule_threshold=1e-2, k=3):
-        """
-        Initialize the top-k rule extractor.
-        
-        Args:
-            data: Data object containing parser and relation information
-            rule_threshold: Minimum attention threshold for including a rule
-            k: Number of top predicates to consider at each step
-        """
-        super().__init__(data, rule_threshold)
-        self.k = k
-    
-    def extract(self, attention_weights, query):
-        """
-        Extract rules using top-k selection at each step.
-        
-        Currently returns top-1 as placeholder. Can be extended to generate
-        multiple rules by exploring top-k paths.
-        
-        Args:
-            attention_weights: Attention distributions for each step and rank.
-            query: Query identifier
-            
-        Returns:
-            List of rule strings in Prolog format
-        """
-        # For now, delegate to top-1 as a starting point
-        # Future implementation can explore k-best paths
-        top1_extractor = Top1RuleExtractor(self.data, self.rule_threshold)
-        return top1_extractor.extract(attention_weights, query)
 
 
 def extract_rules_from_model(sess, learner, data, queries=None, 
@@ -230,10 +186,9 @@ def extract_rules_from_model(sess, learner, data, queries=None,
         data: Data object containing dataset and parser information
         queries: List of query identifiers to extract rules for.
                 If None, uses all queries that appear in train/test.
-        method: Extraction method to use ('top_1', 'top_k')
+        method: Extraction method to use ('top_1')
         rule_threshold: Minimum attention threshold for including a rule
         **kwargs: Additional parameters for specific extraction methods
-                 (e.g., k for top_k)
     
     Returns:
         Dictionary mapping query identifiers to lists of Prolog rule strings.
@@ -255,9 +210,6 @@ def extract_rules_from_model(sess, learner, data, queries=None,
     # Select the appropriate extractor
     if method == 'top_1':
         extractor = Top1RuleExtractor(data, rule_threshold)
-    elif method == 'top_k':
-        k = kwargs.get('k', 3)
-        extractor = TopKRuleExtractor(data, rule_threshold, k)
     else:
         raise ValueError(f"Unknown extraction method: {method}")
     
@@ -292,11 +244,8 @@ def get_attention_weights_for_query(sess, learner, data, query):
     Returns:
         Attention weights as numpy array with shape [rank, num_steps, num_operators]
     """
-    # Prepare query input based on data type
-    if not data.query_is_language:
-        queries = [query]
-    else:
-        queries = [query]
+    # Prepare query input
+    queries = [query]
     
     # Create dummy data for running the model
     # Note: We only care about attention weights, not actual predictions
@@ -322,7 +271,7 @@ def get_attention_weights_for_query(sess, learner, data, query):
         
         # Run the graph to get attention values
         feed = {}
-        if not data.query_is_language:
+        if not learner.query_is_language:
             # Repeat query for num_step-1 steps, then append END token (data.num_query)
             # This is the input format expected by the DRUM model
             feed[learner.queries] = [[q] * (learner.num_step - 1) + [data.num_query]
@@ -371,10 +320,8 @@ def save_rules_to_file(rules_dict, output_file, data):
     with open(output_file, 'w') as f:
         for query, rules in sorted(rules_dict.items()):
             # Write query header
-            if not data.query_is_language:
-                query_name = data.parser["query"][query]
-            else:
-                query_name = data.parser["query"](query)
+            # For standard queries, query is an int; for language queries, it's a list
+            query_name = data.parser["query"][query] if isinstance(query, int) else data.parser["query"](query)
             
             f.write(f"% Rules for query: {query_name}\n")
             

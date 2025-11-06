@@ -62,8 +62,6 @@ def main():
     # rule extraction
     parser.add_argument('--extract_rules', default=False, action="store_true",
                        help='Extract rules from trained model')
-    parser.add_argument('--rule_method', default='top_1', type=str,
-                       help='Rule extraction method: top_1, top_k')
     
     d = vars(parser.parse_args())
     option = Option(d)
@@ -140,7 +138,7 @@ def main():
         
         if option.extract_rules:
             print("Start extracting rules...")
-            experiment.extract_rules(method=option.rule_method)
+            experiment.extract_rules()
             
     experiment.close_log_file()
     print("="*36 + "Finish" + "="*36)

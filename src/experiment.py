@@ -213,20 +213,18 @@ class Experiment():
         print(msg)
         self.log_file.write(msg + "\n")
 
-    def extract_rules(self, method='top_1', rule_threshold=None, **kwargs):
+    def extract_rules(self, rule_threshold=None):
         """
         Extract interpretable rules from the trained model.
         
         Args:
-            method: Extraction method ('top_1', 'top_k', etc.)
             rule_threshold: Minimum attention threshold for rules.
                           If None, uses option.rule_thr
-            **kwargs: Additional method-specific parameters
         """
         if rule_threshold is None:
             rule_threshold = self.option.rule_thr
         
-        print("Starting rule extraction with method: %s" % method)
+        print("Starting rule extraction with top-1 method")
         
         # Extract rules from the model
         rules_dict = extract_rules_from_model(
@@ -234,9 +232,8 @@ class Experiment():
             self.learner, 
             self.data,
             queries=None,  # Use all queries from train/test
-            method=method,
-            rule_threshold=rule_threshold,
-            **kwargs
+            method='top_1',
+            rule_threshold=rule_threshold
         )
         
         # Save rules to file

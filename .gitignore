@@ -5,7 +5,3 @@ exps/
 # pixi environments
 .pixi/*
 !.pixi/config.toml
-
-# Test files
-test_*.py
-IMPLEMENTATION_SUMMARY.md

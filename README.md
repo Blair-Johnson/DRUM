@@ -9,7 +9,7 @@ NeurIPS 2019.
 ## Features
 
 - **Differentiable Rule Learning**: End-to-end training of rule-based models on knowledge graphs
-- **Rule Extraction**: Convert trained models into interpretable Prolog-style rules (see [RULE_EXTRACTION.md](RULE_EXTRACTION.md))
+- **Rule Extraction**: Convert trained models into interpretable Prolog-style rules using top-1 (argmax) extraction
 - **Flexible Architecture**: Configurable rank, steps, and attention mechanisms
 
 ## Requirements
@@ -30,7 +30,7 @@ To get the best performance, use different ranks for different datasets, default
 
 ## Rule Extraction
 
-After training a model, you can extract interpretable Prolog-style rules:
+After training a model, you can extract interpretable Prolog-style rules using the top-1 (argmax) extraction method:
 
 ```
 python src/main.py --datadir=datasets/family --exps_dir=exps/ --exp_name=demo --extract_rules
@@ -40,10 +40,10 @@ This will create a file `exps/demo/extracted_rules.pl` containing rules like:
 
 ```prolog
 % Rules for query: grandfather
-grandfather(X,Y) :- father(X,Z), father(Z,Y).
+grandfather(X,Y) :- father(X,Z_1), father(Z_1,Y).
 ```
 
-See [RULE_EXTRACTION.md](RULE_EXTRACTION.md) for detailed documentation on rule extraction features, methods, and API.
+Rules use variable names X (source), Y (target), and Z_1, Z_2, ... for intermediate entities. The top-1 method selects the predicate with highest attention weight at each reasoning step. You can adjust the confidence threshold with `--rule_thr` (default: 0.01).
 
 ## Evaluation
 To evaluate the prediction results, follow the steps below. The first two steps is preparation so that we can compute _filtered_ ranks (see [TransE](https://papers.nips.cc/paper/5071-translating-embeddings-for-modeling-multi-relational-data.pdf) for details).
