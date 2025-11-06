@@ -25,6 +25,6 @@ to_dump = {}
 to_dump["query_head"] = query_head
 to_dump["query_tail"] = query_tail
 truths_file = os.path.join(folder_name, "truths.pckl")
-pickle.dump(to_dump, open(truths_file, "w"))
+pickle.dump(to_dump, open(truths_file, "wb"))
 
 print("Gather truths done.")
