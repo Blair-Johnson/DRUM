@@ -133,12 +133,14 @@ class Data(object):
             if os.path.isfile(valid_file_pl):
                 self.valid, self.num_valid = self._parse_prolog_triplets(valid_file_pl)
             else:
-                # Split from training data if validation doesn't exist
-                if len(self.train) > 0:
+                # For Prolog format with small datasets, don't auto-split
+                # Only split if we have a reasonable number of training examples
+                if len(self.train) >= 20:
                     self.valid, self.train = self._split_valid_from_train()
                     self.num_valid = len(self.valid)
                     self.num_train = len(self.train)
                 else:
+                    # Too few examples to split, use all for training
                     self.valid, self.num_valid = [], 0
         else:
             # TSV format
@@ -162,7 +164,18 @@ class Data(object):
                 self.valid, self.train = self._split_valid_from_train()
                 self.num_valid = len(self.valid)
                 self.num_train = len(self.train)
-
+        
+        # Set operator_to_relation mapping early (needed for _db_to_matrix_db)
+        # This must be done before creating matrix databases
+        if not self.type_check:
+            if self.restrict_domain and self.background_relations is not None:
+                self.operator_to_relation = {}
+                for i, rel_name in enumerate(sorted(self.background_relations)):
+                    rel_idx = self.relation_to_number[rel_name]
+                    self.operator_to_relation[i] = rel_idx
+            else:
+                self.operator_to_relation = None
+        
         if self.share_db:
             if self.use_prolog_format:
                 self.facts, self.num_fact = self._parse_prolog_triplets(self.facts_file)
@@ -200,8 +213,10 @@ class Data(object):
             # When restrict_domain is enabled, num_operator is based on background relations only
             if self.restrict_domain and self.background_relations is not None:
                 self.num_operator = 2 * len(self.background_relations)
+                # operator_to_relation already set above before creating matrix_db
             else:
                 self.num_operator = 2 * self.num_relation
+                # operator_to_relation already set to None above
 
         # get rules for queries and their inverses appeared in train and test
         self.query_for_rules = self._extract_queries_from_datasets()
@@ -389,15 +404,37 @@ class Data(object):
         return valid, new_train
 
     def _db_to_matrix_db(self, db):
-        matrix_db = {r: ([[0,0]], [0.], [self.num_entity, self.num_entity]) 
-                     for r in range(self.num_relation)}
-        for i, fact in enumerate(db):
-            rel = fact[0]
-            head = fact[1]
-            tail = fact[2]
-            value = 1.
-            matrix_db[rel][0].append([head, tail])
-            matrix_db[rel][1].append(value)
+        # When restrict_domain is enabled, only create database entries for background relations
+        # and map them to operator indices (0, 1, 2, ...) instead of full vocab indices
+        if self.restrict_domain and self.operator_to_relation is not None:
+            # Create database indexed by operator indices, not full vocab indices
+            matrix_db = {op_idx: ([[0,0]], [0.], [self.num_entity, self.num_entity]) 
+                         for op_idx in range(len(self.operator_to_relation))}
+            # Create reverse mapping for efficient lookup
+            relation_to_operator = {rel_idx: op_idx for op_idx, rel_idx in self.operator_to_relation.items()}
+            
+            for i, fact in enumerate(db):
+                rel = fact[0]  # Full vocabulary index
+                head = fact[1]
+                tail = fact[2]
+                value = 1.
+                
+                # Only add facts for background relations
+                if rel in relation_to_operator:
+                    op_idx = relation_to_operator[rel]
+                    matrix_db[op_idx][0].append([head, tail])
+                    matrix_db[op_idx][1].append(value)
+        else:
+            # Original behavior: create entries for all relations
+            matrix_db = {r: ([[0,0]], [0.], [self.num_entity, self.num_entity]) 
+                         for r in range(self.num_relation)}
+            for i, fact in enumerate(db):
+                rel = fact[0]
+                head = fact[1]
+                tail = fact[2]
+                value = 1.
+                matrix_db[rel][0].append([head, tail])
+                matrix_db[rel][1].append(value)
         return matrix_db
 
     def _combine_two_mdbs(self, mdbA, mdbB):
