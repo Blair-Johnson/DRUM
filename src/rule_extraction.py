@@ -147,7 +147,16 @@ class Top1RuleExtractor(RuleExtractor):
                 # Get operator name from parser
                 # For standard queries, query is an int index
                 # For language queries, we use the operator directly from parser
-                operator_name = self.parser["operator"][query][max_idx] if isinstance(query, int) else self.parser["operator"][max_idx]
+                # The parser["operator"][query] dict only contains allowed operators
+                # when restrict_domain is enabled, so this naturally filters
+                if isinstance(query, int):
+                    if max_idx in self.parser["operator"][query]:
+                        operator_name = self.parser["operator"][query][max_idx]
+                    else:
+                        # Index not in operator mapping (filtered by restrict_domain)
+                        continue
+                else:
+                    operator_name = self.parser["operator"][max_idx]
                 
                 body_atoms.append(operator_name)
             

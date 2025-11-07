@@ -38,6 +38,8 @@ def main():
     parser.add_argument('--no_extra_facts', default=False, action="store_true")
     parser.add_argument('--query_is_language', default=False, action="store_true")
     parser.add_argument('--vocab_embed_size', default=128, type=int)
+    parser.add_argument('--restrict_domain', default=False, action="store_true",
+                       help='Restrict domain to only predicates in facts.pl (Prolog format only)')
     # model architecture
     parser.add_argument('--num_step', default=3, type=int)
     parser.add_argument('--num_layer', default=1, type=int)
@@ -78,7 +80,8 @@ def main():
     tf.logging.set_verbosity(tf.logging.ERROR)
        
     if not option.query_is_language:
-        data = Data(option.datadir, option.seed, option.type_check, option.domain_size, option.no_extra_facts)
+        data = Data(option.datadir, option.seed, option.type_check, option.domain_size, 
+                   option.no_extra_facts, option.restrict_domain)
     else:
         data = DataPlus(option.datadir, option.seed)
     print("Data prepared.")

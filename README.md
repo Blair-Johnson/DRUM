@@ -22,6 +22,83 @@ python src/main.py --datadir=datasets/family --exps_dir=exps/ --exp_name=demo
 
 To get the best performance, use different ranks for different datasets, default value is set to 3.
 
+## Data Format Support
+
+DRUM now supports two data formats:
+
+### TSV Format (Original)
+The traditional format uses tab-separated values with these files:
+- `entities.txt`: List of entities (one per line)
+- `relations.txt`: List of relations (one per line)
+- `train.txt`: Training examples as `entity1\trelation\tentity2`
+- `test.txt`: Test examples (optional)
+- `valid.txt`: Validation examples (optional)
+- `facts.txt`: Background knowledge facts
+
+### Prolog Format (New)
+You can now use Prolog-style fact files:
+- `facts.pl`: Background knowledge in format `predicate(entity1, entity2).`
+- `train.pl`: Training examples in format `predicate(entity1, entity2).`
+- `test.pl`: Test examples (optional)
+- `valid.pl`: Validation examples (optional)
+
+The system automatically detects which format to use based on file extensions.
+
+**Example Prolog format:**
+```prolog
+% facts.pl - Background knowledge
+father(john, mary).
+mother(jane, mary).
+
+% train.pl - Target relations to learn
+grandfather(john, alice).
+```
+
+**Training with Prolog format:**
+```bash
+python src/main.py --datadir=datasets/my_prolog_data --exps_dir=exps/ --exp_name=prolog_demo
+```
+
+### Restricting Domain to Background Predicates
+
+When using Prolog format, you can restrict the model's operators to only use predicates that appear in `facts.pl`:
+
+```bash
+python src/main.py --datadir=datasets/my_data --exps_dir=exps/ --exp_name=restricted --restrict_domain
+```
+
+With `--restrict_domain` enabled:
+- **Training data**: Includes ALL relations from both `facts.pl` and `train.pl`
+- **Model operators**: Restricted to only predicates from `facts.pl` (background knowledge)
+- **Extracted rules**: Only use background predicates in rule bodies
+
+This is useful when:
+- You have many target relations in `train.pl` (e.g., 600 different relations)
+- You want to learn definitions using only a small set of background predicates from `facts.pl` (e.g., 10 predicates)
+- For example: train on `aunt(X,Y)`, `uncle(X,Y)`, etc., but rules can only use `father(X,Y)`, `mother(X,Y)`, `brother(X,Y)`, `sister(X,Y)`
+
+**Example:**
+```prolog
+% facts.pl - Background knowledge
+father(john, mary).
+mother(jane, mary).
+brother(bob, mary).
+
+% train.pl - Target relations to learn
+aunt(mary, alice).
+grandmother(jane, alice).
+
+% With --restrict_domain, extracted rules:
+aunt(X,Y) :- brother(Z,X), father(Z,Y).  % Only uses background predicates
+```
+
+### Optional Validation and Test Sets
+
+The system now handles missing validation and test sets gracefully:
+- If no validation set is provided, one will be split from training data (10%)
+- If no test set is provided, training will proceed without test evaluation
+- This is useful for exploratory analysis with only training data
+
 ## Rule Extraction
 
 After training a model, you can extract interpretable Prolog-style rules using the top-1 (argmax) extraction method:
@@ -48,5 +125,9 @@ We use the experiment from Quick Start as an example. Change the folder names (d
 python eval/get_truths.py datasets/family
 python eval/evaluate.py --preds=exps/demo/test_predictions.txt --truths=datasets/family/truths.pckl
 ```
+
+## Training with Many Target Relations
+
+For datasets with hundreds of target relations, see [MULTI_TARGET_TRAINING.md](MULTI_TARGET_TRAINING.md) for analysis and recommendations on memory-efficient training strategies.
 
 This code partially is borrowed from [Neural LP](https://github.com/fanyangxyz/Neural-LP).

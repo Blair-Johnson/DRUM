@@ -1,9 +1,41 @@
 import numpy as np 
 import os
 import copy
+import re
 from math import ceil
 from collections import Counter
-                           
+
+def parse_prolog_file(filename):
+    """
+    Parse a Prolog file containing facts in the format:
+    predicate(entity1, entity2).
+    
+    Returns a list of tuples: [(entity1, predicate, entity2), ...]
+    Lines starting with % are comments and are ignored.
+    
+    Supports entity and predicate names with alphanumeric characters, 
+    underscores, and hyphens (but not at the start).
+    """
+    triplets = []
+    # Pattern to match: predicate(arg1, arg2).
+    # Flexible pattern: starts with letter, can contain alphanumeric, underscore, hyphen
+    # Entities can start with alphanumeric (for compatibility with numeric IDs)
+    pattern = re.compile(r'^\s*([a-zA-Z][a-zA-Z0-9_-]*)\s*\(\s*([a-zA-Z0-9][a-zA-Z0-9_-]*)\s*,\s*([a-zA-Z0-9][a-zA-Z0-9_-]*)\s*\)\s*\.')
+    
+    with open(filename, 'r') as f:
+        for line in f:
+            line = line.strip()
+            # Skip empty lines and comments
+            if not line or line.startswith('%'):
+                continue
+            
+            match = pattern.match(line)
+            if match:
+                predicate, entity1, entity2 = match.groups()
+                triplets.append((entity1, predicate, entity2))
+    
+    return triplets
+
 def resplit(train, facts, no_link_percent):
     num_train = len(train)
     num_facts = len(facts)
@@ -44,46 +76,111 @@ def resplit(train, facts, no_link_percent):
     return new_train, new_facts
 
 class Data(object):
-    def __init__(self, folder, seed, type_check, domain_size, no_extra_facts):
+    def __init__(self, folder, seed, type_check, domain_size, no_extra_facts, restrict_domain=False):
         np.random.seed(seed)
         self.seed = seed
         self.type_check = type_check
         self.domain_size = domain_size
         self.use_extra_facts = not no_extra_facts
         self.query_include_reverse = True
+        self.restrict_domain = restrict_domain
 
-        self.relation_file = os.path.join(folder, "relations.txt")
-        self.entity_file = os.path.join(folder, "entities.txt")
+        # Detect file format: Prolog (.pl) or TSV (.txt)
+        self.use_prolog_format = os.path.isfile(os.path.join(folder, "facts.pl"))
         
-        self.relation_to_number, self.entity_to_number = self._numerical_encode()
+        if self.use_prolog_format:
+            # Prolog format: facts.pl and train.pl
+            self.facts_file_pl = os.path.join(folder, "facts.pl")
+            self.train_file_pl = os.path.join(folder, "train.pl")
+            
+            # Parse Prolog files to extract entities and relations
+            self._extract_vocab_from_prolog(folder)
+            # Set background_relations for TSV format
+            if not hasattr(self, 'background_relations'):
+                self.background_relations = None
+        else:
+            # TSV format: traditional file structure
+            self.relation_file = os.path.join(folder, "relations.txt")
+            self.entity_file = os.path.join(folder, "entities.txt")
+            
+            self.relation_to_number, self.entity_to_number = self._numerical_encode()
+            self.background_relations = None
+        
         self.number_to_entity = {v: k for k, v in self.entity_to_number.items()}
+        
+        # Set num_relation and num_query
+        # When restrict_domain is enabled, num_relation is based on ALL relations (for training)
+        # but num_operator will be based on background relations only (for model operations)
         self.num_relation = len(self.relation_to_number)
         self.num_query = self.num_relation * 2
         self.num_entity = len(self.entity_to_number)
-                
-        self.test_file = os.path.join(folder, "test.txt")
-        self.train_file = os.path.join(folder, "train.txt")
-        self.valid_file = os.path.join(folder, "valid.txt")
         
-        if os.path.isfile(os.path.join(folder, "facts.txt")):
-            self.facts_file = os.path.join(folder, "facts.txt")
+        if self.use_prolog_format:
+            # Load train and facts from Prolog files
+            self.train, self.num_train = self._parse_prolog_triplets(self.train_file_pl)
+            self.facts_file = self.facts_file_pl
             self.share_db = True
+            
+            # For Prolog format, test and valid are optional
+            test_file_pl = os.path.join(folder, "test.pl")
+            valid_file_pl = os.path.join(folder, "valid.pl")
+            
+            if os.path.isfile(test_file_pl):
+                self.test, self.num_test = self._parse_prolog_triplets(test_file_pl)
+            else:
+                self.test, self.num_test = [], 0
+                
+            if os.path.isfile(valid_file_pl):
+                self.valid, self.num_valid = self._parse_prolog_triplets(valid_file_pl)
+            else:
+                # For Prolog format with small datasets, don't auto-split
+                # Only split if we have a reasonable number of training examples
+                if len(self.train) >= 20:
+                    self.valid, self.train = self._split_valid_from_train()
+                    self.num_valid = len(self.valid)
+                    self.num_train = len(self.train)
+                else:
+                    # Too few examples to split, use all for training
+                    self.valid, self.num_valid = [], 0
         else:
-            self.train_facts_file = os.path.join(folder, "train_facts.txt")
-            self.test_facts_file = os.path.join(folder, "test_facts.txt")
-            self.share_db = False
+            # TSV format
+            self.test_file = os.path.join(folder, "test.txt")
+            self.train_file = os.path.join(folder, "train.txt")
+            self.valid_file = os.path.join(folder, "valid.txt")
+            
+            if os.path.isfile(os.path.join(folder, "facts.txt")):
+                self.facts_file = os.path.join(folder, "facts.txt")
+                self.share_db = True
+            else:
+                self.train_facts_file = os.path.join(folder, "train_facts.txt")
+                self.test_facts_file = os.path.join(folder, "test_facts.txt")
+                self.share_db = False
 
-        self.test, self.num_test = self._parse_triplets(self.test_file)
-        self.train, self.num_train = self._parse_triplets(self.train_file)        
-        if os.path.isfile(self.valid_file):
-            self.valid, self.num_valid = self._parse_triplets(self.valid_file)
-        else:
-            self.valid, self.train = self._split_valid_from_train()
-            self.num_valid = len(self.valid)
-            self.num_train = len(self.train)
-
-        if self.share_db: 
-            self.facts, self.num_fact = self._parse_triplets(self.facts_file)
+            self.test, self.num_test = self._parse_triplets(self.test_file)
+            self.train, self.num_train = self._parse_triplets(self.train_file)        
+            if os.path.isfile(self.valid_file):
+                self.valid, self.num_valid = self._parse_triplets(self.valid_file)
+            else:
+                self.valid, self.train = self._split_valid_from_train()
+                self.num_valid = len(self.valid)
+                self.num_train = len(self.train)
+        
+        # Set operator_to_relation mapping early (needed for _db_to_matrix_db)
+        # This must be done before creating matrix databases
+        if not self.type_check:
+            if self.restrict_domain and self.background_relations is not None:
+                self.operator_to_relation = {}
+                for i, rel_name in enumerate(sorted(self.background_relations)):
+                    rel_idx = self.relation_to_number[rel_name]
+                    self.operator_to_relation[i] = rel_idx
+            else:
+                self.operator_to_relation = None
+        
+        if self.share_db:
+            if self.use_prolog_format:
+                self.facts, self.num_fact = self._parse_prolog_triplets(self.facts_file)
+            else:
+                self.facts, self.num_fact = self._parse_triplets(self.facts_file)
             self.matrix_db = self._db_to_matrix_db(self.facts)
             self.matrix_db_train = self.matrix_db
             self.matrix_db_test = self.matrix_db
@@ -106,16 +203,98 @@ class Data(object):
             self.domains_file = os.path.join(folder, "stats/domains.txt")
             self.domains = self._parse_domains_file(self.domains_file)
             self.train = sorted(self.train, key=lambda x: x[0])
-            self.test = sorted(self.test, key=lambda x: x[0])
-            self.valid = sorted(self.valid, key=lambda x: x[0])
+            if self.num_test > 0:
+                self.test = sorted(self.test, key=lambda x: x[0])
+            if self.num_valid > 0:
+                self.valid = sorted(self.valid, key=lambda x: x[0])
             self.num_operator = 2 * self.domain_size
         else:
             self.domains = None
-            self.num_operator = 2 * self.num_relation
+            # When restrict_domain is enabled, num_operator is based on background relations only
+            if self.restrict_domain and self.background_relations is not None:
+                self.num_operator = 2 * len(self.background_relations)
+                # operator_to_relation already set above before creating matrix_db
+            else:
+                self.num_operator = 2 * self.num_relation
+                # operator_to_relation already set to None above
 
         # get rules for queries and their inverses appeared in train and test
-        self.query_for_rules = list(set(list(zip(*self.train))[0]) | set(list(zip(*self.test))[0]) | set(list(zip(*self._augment_with_reverse(self.train)))[0]) | set(list(zip(*self._augment_with_reverse(self.test)))[0]))
+        self.query_for_rules = self._extract_queries_from_datasets()
         self.parser = self._create_parser()
+    
+    def _extract_queries_from_datasets(self):
+        """Extract unique queries from train and test datasets.
+        
+        Returns a list of query IDs.
+        """
+        queries = set()
+        
+        if self.num_train > 0:
+            queries |= set(list(zip(*self.train))[0])
+            queries |= set(list(zip(*self._augment_with_reverse(self.train)))[0])
+        
+        if self.num_test > 0:
+            queries |= set(list(zip(*self.test))[0])
+            queries |= set(list(zip(*self._augment_with_reverse(self.test)))[0])
+        
+        return list(queries)
+    
+    def _extract_vocab_from_prolog(self, folder):
+        """Extract entities and relations from Prolog files."""
+        # Read both facts and train files to get complete vocabulary
+        facts_triplets = parse_prolog_file(self.facts_file_pl)
+        train_triplets = parse_prolog_file(self.train_file_pl)
+        all_triplets = facts_triplets + train_triplets
+        
+        # Extract unique entities and relations
+        entities = set()
+        all_relations = set()
+        background_relations = set()
+        
+        for head, rel, tail in all_triplets:
+            entities.add(head)
+            entities.add(tail)
+            all_relations.add(rel)
+        
+        # Background relations are those in facts.pl
+        for head, rel, tail in facts_triplets:
+            background_relations.add(rel)
+        
+        # Create entity mappings (always use all entities)
+        self.entity_to_number = {entity: i for i, entity in enumerate(sorted(entities))}
+        
+        # Create relation mappings
+        if self.restrict_domain:
+            # When restrict_domain is enabled:
+            # - relation_to_number includes ALL relations (for training targets)
+            # - But we track which ones are background-only (for operators)
+            self.relation_to_number = {rel: i for i, rel in enumerate(sorted(all_relations))}
+            self.background_relations = background_relations
+            # num_relation and num_operator will be set based on background relations only
+        else:
+            # Without restrict_domain, use all relations
+            self.relation_to_number = {rel: i for i, rel in enumerate(sorted(all_relations))}
+            self.background_relations = None
+    
+    def _parse_prolog_triplets(self, filename):
+        """Parse Prolog file and convert to internal format."""
+        triplets_raw = parse_prolog_file(filename)
+        output = []
+        
+        for head, rel, tail in triplets_raw:
+            # Skip relations not in our vocabulary (when restrict_domain is enabled)
+            if rel not in self.relation_to_number:
+                continue
+            
+            # Skip entities not in our vocabulary
+            if head not in self.entity_to_number or tail not in self.entity_to_number:
+                continue
+                
+            output.append((self.relation_to_number[rel],
+                          self.entity_to_number[head],
+                          self.entity_to_number[tail]))
+        
+        return output, len(output)
 
     def _create_parser(self):
         """Create a parser that maps numbers to queries and operators given queries"""
@@ -123,9 +302,12 @@ class Data(object):
         parser = {"query":{}, "operator":{}}
         number_to_relation = {value: key for key, value 
                                          in self.relation_to_number.items()}
+        # Create query mappings for ALL relations (including targets)
         for key, value in self.relation_to_number.items():
             parser["query"][value] = key
             parser["query"][value + self.num_relation] = "inv_" + key
+        
+        # Create operator mappings for each query
         for query in range(self.num_relation):
             d = {}
             if self.type_check:
@@ -133,9 +315,22 @@ class Data(object):
                     d[i] = number_to_relation[o]
                     d[i + self.domain_size] = "inv_" + number_to_relation[o]
             else:
-                for k, v in number_to_relation.items():
-                    d[k] = v
-                    d[k + self.num_relation] = "inv_" + v
+                # When restrict_domain is enabled, only include background relations as operators
+                if self.restrict_domain and self.background_relations is not None:
+                    # Create a mapping from background relation index to operator index
+                    background_rel_to_idx = {}
+                    for k, v in number_to_relation.items():
+                        if v in self.background_relations:
+                            # Map to sequential operator indices
+                            op_idx = len(background_rel_to_idx)
+                            background_rel_to_idx[k] = op_idx
+                            d[op_idx] = v
+                            d[op_idx + len(self.background_relations)] = "inv_" + v
+                else:
+                    # Default: all relations are operators
+                    for k, v in number_to_relation.items():
+                        d[k] = v
+                        d[k + self.num_relation] = "inv_" + v
             parser["operator"][query] = d
             parser["operator"][query + self.num_relation] = d
         return parser
@@ -209,15 +404,37 @@ class Data(object):
         return valid, new_train
 
     def _db_to_matrix_db(self, db):
-        matrix_db = {r: ([[0,0]], [0.], [self.num_entity, self.num_entity]) 
-                     for r in range(self.num_relation)}
-        for i, fact in enumerate(db):
-            rel = fact[0]
-            head = fact[1]
-            tail = fact[2]
-            value = 1.
-            matrix_db[rel][0].append([head, tail])
-            matrix_db[rel][1].append(value)
+        # When restrict_domain is enabled, only create database entries for background relations
+        # and map them to operator indices (0, 1, 2, ...) instead of full vocab indices
+        if self.restrict_domain and self.operator_to_relation is not None:
+            # Create database indexed by operator indices, not full vocab indices
+            matrix_db = {op_idx: ([[0,0]], [0.], [self.num_entity, self.num_entity]) 
+                         for op_idx in range(len(self.operator_to_relation))}
+            # Create reverse mapping for efficient lookup
+            relation_to_operator = {rel_idx: op_idx for op_idx, rel_idx in self.operator_to_relation.items()}
+            
+            for i, fact in enumerate(db):
+                rel = fact[0]  # Full vocabulary index
+                head = fact[1]
+                tail = fact[2]
+                value = 1.
+                
+                # Only add facts for background relations
+                if rel in relation_to_operator:
+                    op_idx = relation_to_operator[rel]
+                    matrix_db[op_idx][0].append([head, tail])
+                    matrix_db[op_idx][1].append(value)
+        else:
+            # Original behavior: create entries for all relations
+            matrix_db = {r: ([[0,0]], [0.], [self.num_entity, self.num_entity]) 
+                         for r in range(self.num_relation)}
+            for i, fact in enumerate(db):
+                rel = fact[0]
+                head = fact[1]
+                tail = fact[2]
+                value = 1.
+                matrix_db[rel][0].append([head, tail])
+                matrix_db[rel][1].append(value)
         return matrix_db
 
     def _combine_two_mdbs(self, mdbA, mdbB):
@@ -245,13 +462,13 @@ class Data(object):
         self.valid_start = 0
         self.test_start = 0
         if not self.type_check:
-            self.num_batch_train = self.num_train // batch_size + 1
-            self.num_batch_valid = self.num_valid // batch_size + 1
-            self.num_batch_test = self.num_test // batch_size + 1
+            self.num_batch_train = self.num_train // batch_size + 1 if self.num_train > 0 else 0
+            self.num_batch_valid = self.num_valid // batch_size + 1 if self.num_valid > 0 else 0
+            self.num_batch_test = self.num_test // batch_size + 1 if self.num_test > 0 else 0
         else:
-            self.num_batch_train = self._count_batch(self.train, batch_size)
-            self.num_batch_valid = self._count_batch(self.valid, batch_size)
-            self.num_batch_test = self._count_batch(self.test, batch_size)
+            self.num_batch_train = self._count_batch(self.train, batch_size) if self.num_train > 0 else 0
+            self.num_batch_valid = self._count_batch(self.valid, batch_size) if self.num_valid > 0 else 0
+            self.num_batch_test = self._count_batch(self.test, batch_size) if self.num_test > 0 else 0
 
     def train_resplit(self, no_link_percent):
       new_train, new_facts = resplit(self.train, self.facts, no_link_percent)
